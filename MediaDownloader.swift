@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 
 /// 文件类型枚举，用于统一管理支持的文件类型
 enum MediaFileType: String, CaseIterable {
+    
     // 图片类型
     case webp = "org.webmproject.webp"
     case png = "public.png"
@@ -46,11 +47,53 @@ enum MediaFileType: String, CaseIterable {
         }
     }
     
+
+    
+    /// 将枚举值转换为对应的文件扩展名字符串
+    /// - Returns: 文件扩展名字符串（不含点）
+    func toFileExtension() -> String {
+        switch self {
+        case .webp:
+            return "webp"
+        case .png:
+            return "png"
+        case .jpeg:
+            return "jpeg"
+        case .gif:
+            return "gif"
+        case .heic:
+            return "heic"
+        case .heif:
+            return "heif"
+        case .tiff:
+            return "tiff"
+        case .bmp:
+            return "bmp"
+        case .mp4:
+            return "mp4"
+        case .mov:
+            return "mov"
+        case .avi:
+            return "avi"
+        case .wmv:
+            return "wmv"
+        case .mkv:
+            return "mkv"
+        }
+    }
+    
     /// 检查给定的 UTI 类型是否在支持的类型列表中
     /// - Parameter utiType: UTI 类型字符串
     /// - Returns: 是否在支持的类型列表中
     static func isSupportedType(_ utiType: String) -> Bool {
         return MediaFileType.allCases.contains { $0.rawValue == utiType }
+    }
+    
+    /// 根据 UTI 类型字符串获取对应的文件类型
+    /// - Parameter utiType: UTI 类型字符串
+    /// - Returns: 对应的 MediaFileType，或 nil 如果不支持
+    static func fromUTIType(_ utiType: String) -> MediaFileType? {
+        return MediaFileType(rawValue: utiType)
     }
 }
 
@@ -144,7 +187,7 @@ class MediaDownloader {
                 }
                 
                 // 获取文件类型（UTI Type）
-                let utiType = MediaDownloader.getUTIType(for: url, with: response as? HTTPURLResponse)
+                let utiType = getUTIType(for: url, with: response as? HTTPURLResponse)
                 
                 // 检查是否为 WebP 格式
                 if utiType == MediaFileType.webp.rawValue {
@@ -218,7 +261,7 @@ class MediaDownloader {
             }
             
             // 下载视频到临时文件
-            URLSession.shared.downloadTask(with: url) { tempURL, _, error in
+            URLSession.shared.downloadTask(with: url) { tempURL, response, error in
                 if let error = error {
                     completion(error)
                     return
@@ -228,9 +271,15 @@ class MediaDownloader {
                     return
                 }
                 
+                // 获取文件类型（UTI Type）
+                let utiType = getUTIType(for: url, with: response as? HTTPURLResponse)
+                //获取文件后缀
+                let fileExtension = MediaFileType.fromUTIType(utiType)?.toFileExtension() ?? "mov"
+                
+              
                 // 将临时文件移到持久目录，以确保 PHAssetResource 能访问
                 let fileManager = FileManager.default
-                let localURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".mov")
+                let localURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "." + fileExtension)
                 do {
                     try fileManager.moveItem(at: tempURL, to: localURL)
                 } catch {
@@ -242,6 +291,8 @@ class MediaDownloader {
                 PHPhotoLibrary.shared().performChanges({
                     let creationRequest = PHAssetCreationRequest.forAsset()
                     let options = PHAssetResourceCreationOptions()
+                    // 设置资源类型，确保系统正确识别视频格式
+                    options.uniformTypeIdentifier = utiType
                     creationRequest.addResource(with: .video, fileURL: localURL, options: options)
                 }) { success, error in
                     // 删除临时文件
